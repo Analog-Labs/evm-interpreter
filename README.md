@@ -1,13 +1,12 @@
-## Foundry
+## EVM Interpreter
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+**Optimized on-chain EVM interpreter, run arbitrary code without deploying a contract!**
 
-Foundry consists of:
+This is an EVM-interpreter written in pure EVM assembly, this is useful for the following:
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+-   **Extract Runtime Bytecode**: Run the `type(Contract).creationCode` on-chain to extract the `type(Contract).runtimeCode`, useful when the contract has immutables.
+-   **Dynamic Contracts**: Upgrade specific parts of a smart-contract, without having to deploy a new contract.
+-   **Account Abstraction**: Create a proxy that delegates the call to this interpreter with additional ownership verification, and use it instead your EOA account!
 
 ## Documentation
 
