@@ -364,8 +364,17 @@ The EVM Interpreter was permissionless deployed on all networks supported by the
 | [**Moonbase**](https://moonbase.moonscan.io/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                    |   1287   |
 | [**Shibuya**](https://shibuya.blockscout.com/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                   |    81    |
 
-## Known limitations
-- The GAS opcode (a.k.a `gasleft()` in solidity) return different values between non-interpreted VS Interpreted code, this is due the interpreter overhead.
-- No JUMPDEST table checks, to reduce the gas overhead this interpreter just check the PC points to JUMPDEST byte, it doesn't consider JUMPDEST inside a PUSH* for example.
-- You cannot provide `CALLDATA` parameters (like when executing an contract constructor).
+## Caveats
+- You cannot provide `CALLDATA` parameters, all data must be available in the bytecode (like when executing an contract constructor).
+- The maximum stack size is reduced by `2`, once the interpreter needs two slots to store and manipulate the programn counter.
+- The minimal supported EVM version is `shanghai`.
+- Only the opcodes up to `cancun` are supported.
+- This contract IS NOT upgradeable, any new opcode requires modify and redeploy this contract in a new address.
+- Currently this contract has not been externally audited.
 
+## Ways to detect the interpreter from the code
+When using this interpreter to extract the `runtimeCode` from the `creationCode`, the following can be used by the creationCode to detect wether it is running by the interpreter or not:
+- The GAS opcode (a.k.a `gasleft()` in solidity) return different values between non-interpreted VS interpreted code, this is due the interpreter gas overhead.
+- No JUMPDEST table checks, to reduce the gas overhead this interpreter just check the new PC lands at a JUMPDEST byte, it doesn't consider if the JUMPDEST is inside a PUSH* for example.
+- `MSIZE` always starts at `32`, even if no memory was used whatsoever, that's because the interpreter uses this information internally, it is used to detect wether the contract must execute the next instruction or the `STOP` opcode.
+- `SWAP16` and `DUP16` may expand the `MSIZE`, once the interpreter needs to cache the programn counter to release the top of stack.
