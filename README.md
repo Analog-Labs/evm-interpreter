@@ -36,27 +36,49 @@ contract ExtractRuntime {
 </details>
 
 ### Account Abstraction
-Create a proxy account that delegates the call to the interpreter with additional ownership verification, and use it instead your EOA account!
+Create a proxy account that delegates the call to the interpreter with additional ownership verification, and use it instead your EOA account! This allows you to run ANY arbitrary code without having to deploy a new implementation contract everytime.
 
 <details>
   <summary>Example</summary>
 
   ```solidity
 contract ProxyAccount {
-    address immutable private OWNER;
+    address immutable private ADMIN;
     address constant internal INTERPRETER = 0x0000000000001e3F4F615cd5e20c681Cf7d85e8D;
 
-    constructor() {
-        OWNER = msg.sender;
+    /**
+     * @dev Storage slot with the address of the current implementation.
+     * This is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1, and is
+     * validated in the constructor.
+     *
+     * @notice Used to extend this contract methods, useful when need to add a token callbacks, such as IERC721Receiver, ERC1155Receiver, etc.
+     */
+    bytes32 internal constant _IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+
+    constructor(address implementation) {
+        ADMIN = msg.sender;
+        assembly {
+            sstore(_IMPLEMENTATION_SLOT, implementation)
+        }
     }
 
+    // OBS: If you want to hold tokens in this proxy account, use the `implementation` to support `IERC721Receiver`, `ERC1155Receiver` interfaces
+    // or any other required token interface, otherwise you will not be able to hold tokens other than ERC20 in this contract.
+
     fallback() external payable {
-        if (msg.sender != OWNER) {
-            // Handle here `IERC721Receiver`, `ERC1155Receiver`, etc..
-            return;
+        address implementation;
+        if (msg.sender == ADMIN) {
+            // Only the `ADMIN` can execute arbitrary code.
+            implementation = INTERPRETER;
+        } else {
+            // Delegate to `implementation` to handle token callbacks.
+            // Obs: the `ADMIN` can change the implementation by executing the INTERPRETER with
+            // SSTORE(_IMPLEMENTATION_SLOT, newImplementation)
+            assembly {
+                implementation := sload(_IMPLEMENTATION_SLOT)
+            }
         }
 
-        // Only the `OWNER` can execute arbitrary code.
         assembly {
             // copy the bytecode to memory
             calldatacopy(0, 0, calldatasize())
@@ -64,7 +86,7 @@ contract ProxyAccount {
             // execute the interpreter with the provided bytecode.
             let success := delegatecall(
                 gas(),
-                INTERPRETER,
+                implementation,
                 0,
                 calldatasize(),
                 0,
@@ -225,7 +247,7 @@ contract Vault {
 
 ## Usage
 
-If you want to use this interpreter but has not mastered the black art of EVM assembly, you can use execute compile solidity code.
+If you want to use this interpreter but has not mastered the black art of EVM assembly, you can compile solidity code instead.
 
 
 In this example, we will assume you deployed an [ProxyAccount](#account-abstraction) from the previous example, and now want to execute some arbitrary code.
@@ -302,6 +324,23 @@ When using the constructor, you MUST use the contract `creationCode`:
 type(Method02).creationCode // <--- Must use this
 (bool success, bytes memory result) = INTERPRETER.delegatecall(type(Method02).creationCode);
 uint256 balance = abi.decode(result, (uint256));
+```
+
+### Estimate gas and dry-run
+You can test the interpreter by doing a ethereum call, and replace the `<CODE_HERE>` and `<RPC_URL>` below.
+```shell
+curl --data '{"method":"eth_call","params":[{"to":"0x0000000000001e3F4F615cd5e20c681Cf7d85e8D","data":"<CODE_HERE>"}],"id":1,"jsonrpc":"2.0"}' \
+    -H "Content-Type: application/json" \
+    -X POST \
+    <RPC_URL>
+```
+
+Or for estimate the gas for executing your script.
+```shell
+curl --data '{"method":"eth_call","params":[{"to":"0x0000000000001e3F4F615cd5e20c681Cf7d85e8D","data":"<CODE_HERE>"}],"id":1,"jsonrpc":"2.0"}' \
+    -H "Content-Type: application/json" \
+    -X POST \
+    <RPC_URL>
 ```
 
 ## Deployments [EVM Interpreter](./src/interpreter.bytecode)
