@@ -2,7 +2,7 @@
 
 **Optimized on-chain EVM interpreter, run arbitrary code without deploying a contract!**
 
-This is an EVM-interpreter written in pure EVM assembly, this is useful for the following:
+This is an EVM-interpreter written in [pure EVM assembly](./src/interpreter.bytecode), each opcode executed using this interpreter has in average `~40 gas` overhead:
 
 ## Documentation
 
@@ -42,7 +42,7 @@ Create a proxy account that delegates the call to the interpreter with additiona
   <summary>Example</summary>
 
   ```solidity
-contract Account {
+contract ProxyAccount {
     address immutable private OWNER;
     address constant internal INTERPRETER = 0x0000000000001e3F4F615cd5e20c681Cf7d85e8D;
 
@@ -223,23 +223,110 @@ contract Vault {
   ```
 </details>
 
-## Deployments [EVM Interpreter](./src/UniversalFactory.sol)
-The Universal Factory is already available in 8 blockchains and 7 testnets at address `0x0000000000001C4Bf962dF86e38F0c10c7972C6E`:
+## Usage
+
+If you want to use this interpreter but has not mastered the black art of EVM assembly, you can use execute compile solidity code.
+
+
+In this example, we will assume you deployed an [ProxyAccount](#account-abstraction) from the previous example, and now want to execute some arbitrary code.
+
+
+### Method 01 - Fallback function
+
+To Create a contract that contains the `fallback() external payable` method, executing the interpreter is equivalent to execute a contract constructor, you can't provide `calldata` parameters, so all the information must be available inside the bytecode itself (like executing a contract contructor).
+```solidity
+contract Method01 {
+    IERC20 constant private USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    uint256 constant private ONE_DOLLAR = 1000000;
+
+    fallback(bytes calldata) payable external returns (bytes memory) {
+        // Transfer ETHER to 4 accounts
+        payable(0x1E3187ff2b37e3587B94a21EAd1087357d0eeE10).transfer(0.1 ether);
+        payable(0xd32Dac25bFF658A739E4ee26700Fb36aDf441607).transfer(0.1 ether);
+        payable(0x0dAa76F786183a0820EC1Bb6b1f84015e8C7D453).transfer(0.1 ether);
+
+        // Transfer USDT to 3 accounts
+        USDT.transfer(0xc0B20370a21fc4ec94beeFd364F0E6C01a615ce8, ONE_DOLLAR);
+        USDT.transfer(0xB8E766d71c3392144740c1c017667A5F8Ade7fE9, ONE_DOLLAR);
+        USDT.transfer(0xf0289C6333BB1e9Dc80FA7a79A05371eFeC04a98, ONE_DOLLAR);
+        
+        // Verify final balance
+        uint256 balance = USDT.balanceOf(address(this));
+        return abi.encode(balance);
+    }
+}
+```
+When using the fallback function, you MUST use the contract `runtimeCode`, not the `creationCode`:
+
+```solidity
+type(Method01).runtimeCode  // <--- Must use this
+type(Method01).creationCode // Not this
+(bool success, bytes memory result) = INTERPRETER.delegatecall(type(Method01).runtimeCode);
+uint256 balance = abi.decode(result, (uint256));
+```
+
+### Method 02 - Constructor function
+The following code is equivalent to the previous one, except we use the constructor instead the fallback function, and this requires inline assembly to return the desired result.
+One advantage of the constructor is that you can provide provide parameters (which are actually appended at the end of the bytecode).
+
+tip: if you don't want to return any result, return empty bytes, because the solidity compiler will remove a lot of unecessary code.
+```solidity
+contract Method02 {
+    IERC20 constant private USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
+    uint256 constant private ONE_DOLLAR = 1000000;
+
+    constructor() {
+        // Transfer ETHER to 4 accounts
+        payable(0x1E3187ff2b37e3587B94a21EAd1087357d0eeE10).transfer(0.1 ether);
+        payable(0xd32Dac25bFF658A739E4ee26700Fb36aDf441607).transfer(0.1 ether);
+        payable(0x0dAa76F786183a0820EC1Bb6b1f84015e8C7D453).transfer(0.1 ether);
+
+        // Transfer USDT to 3 accounts
+        USDT.transfer(0xc0B20370a21fc4ec94beeFd364F0E6C01a615ce8, ONE_DOLLAR);
+        USDT.transfer(0xB8E766d71c3392144740c1c017667A5F8Ade7fE9, ONE_DOLLAR);
+        USDT.transfer(0xf0289C6333BB1e9Dc80FA7a79A05371eFeC04a98, ONE_DOLLAR);
+        
+        // Verify final balance
+        uint256 balance = USDT.balanceOf(address(this));
+        
+        bytes memory result = abi.encode(balance);
+        assembly {
+            return(add(result, 0x20), mload(result))
+        }
+    }
+}
+```
+When using the constructor, you MUST use the contract `creationCode`:
+
+```solidity
+type(Method02).creationCode // <--- Must use this
+(bool success, bytes memory result) = INTERPRETER.delegatecall(type(Method02).creationCode);
+uint256 balance = abi.decode(result, (uint256));
+```
+
+## Deployments [EVM Interpreter](./src/interpreter.bytecode)
+The EVM Interpreter was permissionless deployed on all networks supported by the [Universal Factory](https://github.com/Lohann/universal-factory) at address `0x0000000000001e3F4F615cd5e20c681Cf7d85e8D`:
 
 | NETWORK                                                                                                            | CHAIN ID |
 |--------------------------------------------------------------------------------------------------------------------|:--------:|
-| [**Ethereum Mainnet**](https://etherscan.io/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                    |     0    |
-| [**Ethereum Classic**](https://etc.tokenview.io/en/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)             |    61    |
-| [**Polygon PoS**](https://polygonscan.com/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                      |    137   |
-| [**Arbitrum One**](https://arbiscan.io/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                         |   42161  |
-| [**Avalanche C-Chain**](https://subnets.avax.network/c-chain/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)   |   43114  |
-| [**BNB Smart Chain**](https://bscscan.com/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                      |    56    |
-| [**Astar**](https://astar.blockscout.com/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                       |    592   |
-| [**Sepolia**](https://sepolia.etherscan.io/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                     | 11155111 |
-| [**Holesky**](https://holesky.etherscan.io/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                     |   17000  |
-| [**Polygon Amoy**](https://amoy.polygonscan.com/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                |   80002  |
-| [**Arbitrum One Sepolia**](https://sepolia.arbiscan.io/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)         |  421614  |
-| [**Avalanche Fuji**](https://testnet.avascan.info/blockchain/c/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E) |   43113  |
-| [**BNB Smart Chain Testnet**](https://testnet.bscscan.com/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)      |    97    |
-| [**Moonbase**](https://moonbase.moonscan.io/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                    |   1287   |
-| [**Shibuya**](https://shibuya.blockscout.com/address/0x0000000000001C4Bf962dF86e38F0c10c7972C6E)                   |    81    |
+| [**Ethereum Mainnet**](https://etherscan.io/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                    |     0    |
+| [**Ethereum Classic**](https://etc.tokenview.io/en/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)             |    61    |
+| [**Polygon PoS**](https://polygonscan.com/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                      |    137   |
+| [**Arbitrum One**](https://arbiscan.io/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                         |   42161  |
+| [**Avalanche C-Chain**](https://subnets.avax.network/c-chain/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)   |   43114  |
+| [**BNB Smart Chain**](https://bscscan.com/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                      |    56    |
+| [**Astar**](https://astar.blockscout.com/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                       |    592   |
+| [**Sepolia**](https://sepolia.etherscan.io/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                     | 11155111 |
+| [**Holesky**](https://holesky.etherscan.io/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                     |   17000  |
+| [**Polygon Amoy**](https://amoy.polygonscan.com/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                |   80002  |
+| [**Arbitrum One Sepolia**](https://sepolia.arbiscan.io/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)         |  421614  |
+| [**Avalanche Fuji**](https://testnet.avascan.info/blockchain/c/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D) |   43113  |
+| [**BNB Smart Chain Testnet**](https://testnet.bscscan.com/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)      |    97    |
+| [**Moonbase**](https://moonbase.moonscan.io/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                    |   1287   |
+| [**Shibuya**](https://shibuya.blockscout.com/address/0x0000000000001e3F4F615cd5e20c681Cf7d85e8D)                   |    81    |
+
+## Known limitations
+- The GAS opcode (a.k.a `gasleft()` in solidity) return different values between non-interpreted VS Interpreted code, this is due the interpreter overhead.
+- No JUMPDEST table checks, to reduce the gas overhead this interpreter just check the PC points to JUMPDEST byte, it doesn't consider JUMPDEST inside a PUSH* for example.
+- You cannot provide `CALLDATA` parameters (like when executing an contract constructor).
+
