@@ -10,7 +10,6 @@ pragma solidity >=0.7.0 <0.9.0;
  * @dev Utilities for branchless operations, useful when a constant gas cost is required.
  */
 library BranchlessMath {
-
     /**
      * @dev Cast a boolean (false or true) to a uint256 (0 or 1) with no jump.
      */

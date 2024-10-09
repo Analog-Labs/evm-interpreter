@@ -10,10 +10,10 @@ contract InterpreterTest is Test {
     using BranchlessMath for uint256;
     using InterpreterUtils for Interpreter;
 
-    address constant private CREATE2_DEPLOYER = address(0x0000000000001C4Bf962dF86e38F0c10c7972C6E);
-    bytes32 constant private CREATE2_SALT = 0xc8530e31f6ca0170eadd291ef7444560d457094dc3888d929e3cd76bcd4acf7f;
+    address private constant CREATE2_DEPLOYER = address(0x0000000000001C4Bf962dF86e38F0c10c7972C6E);
+    bytes32 private constant CREATE2_SALT = 0xc8530e31f6ca0170eadd291ef7444560d457094dc3888d929e3cd76bcd4acf7f;
 
-    Interpreter immutable internal INTERPRETER;
+    Interpreter internal immutable INTERPRETER;
 
     constructor() {
         address interpreter;
@@ -21,9 +21,7 @@ contract InterpreterTest is Test {
         vm.prank(CREATE2_DEPLOYER, CREATE2_DEPLOYER);
         assembly {
             interpreter := create2(0, add(bytecode, 0x20), mload(bytecode), CREATE2_SALT)
-            if iszero(interpreter) {
-                revert(0, 0)
-            }
+            if iszero(interpreter) { revert(0, 0) }
         }
         INTERPRETER = Interpreter.wrap(interpreter);
     }
@@ -45,14 +43,7 @@ contract InterpreterTest is Test {
 
     function test_opcodeAdd(uint256 a, uint256 b) external view {
         bytes memory data = bytes.concat(
-            encodePush(a),
-            encodePush(b),
-            hex"01",
-            encodePush(0),
-            hex"52",
-            encodePush(32),
-            encodePush(0),
-            hex"f3"
+            encodePush(a), encodePush(b), hex"01", encodePush(0), hex"52", encodePush(32), encodePush(0), hex"f3"
         );
         bytes memory result = INTERPRETER.call(data);
         unchecked {
@@ -62,14 +53,7 @@ contract InterpreterTest is Test {
 
     function test_opcodeSub(uint256 a, uint256 b) external view {
         bytes memory data = bytes.concat(
-            encodePush(b),
-            encodePush(a),
-            hex"03",
-            encodePush(0),
-            hex"52",
-            encodePush(32),
-            encodePush(0),
-            hex"f3"
+            encodePush(b), encodePush(a), hex"03", encodePush(0), hex"52", encodePush(32), encodePush(0), hex"f3"
         );
         bytes memory result = INTERPRETER.call(data);
         unchecked {

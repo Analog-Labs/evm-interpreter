@@ -9,7 +9,7 @@ import {Interpreter, InterpreterUtils} from "./InterpreterUtils.sol";
 abstract contract Executor {
     using InterpreterUtils for Interpreter;
 
-    Interpreter immutable internal INTERPRETER;
+    Interpreter internal immutable INTERPRETER;
 
     constructor(address interpreter) {
         INTERPRETER = Interpreter.wrap(interpreter);

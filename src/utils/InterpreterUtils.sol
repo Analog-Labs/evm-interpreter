@@ -7,7 +7,6 @@ type Interpreter is address;
  * @dev Utilities for interact with the EVM interpreter.
  */
 library InterpreterUtils {
-
     /**
      * @dev Error is thown when the gas left is insufficient to perform an
      * operation like check for EIP1153 supported.
@@ -80,9 +79,7 @@ library InterpreterUtils {
 
             // Execute the bytecode
             let success := call(30000, interpreter, 0, 0, 0x43, 0, 0)
-            if iszero(success) {
-                revert(0, 0)
-            }
+            if iszero(success) { revert(0, 0) }
 
             // cleanup first 3 bytes of free memory pointer at 0x40
             mstore(0x23, 0)
@@ -105,12 +102,8 @@ library InterpreterUtils {
 
             // Execute the code
             let success := staticcall(10000, interpreter, 0, 0x28, 0, 0x20)
-            if iszero(success) {
-                revert(0, 0)
-            }
+            if iszero(success) { revert(0, 0) }
             value := mload(0)
         }
     }
 }
-
-
